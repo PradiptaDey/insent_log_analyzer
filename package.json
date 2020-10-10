@@ -1,0 +1,23 @@
+{
+  "name": "insent_log_analyzer",
+  "version": "1.0.0",
+  "description": "Analyzing Logs to Determine User Frequency",
+  "main": "analyzer.js",
+  "scripts": {
+    "start": "node analyzer.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PradiptaDey/insent_log_analyzer.git"
+  },
+  "author": "Pradipta Dey",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/PradiptaDey/insent_log_analyzer/issues"
+  },
+  "homepage": "https://github.com/PradiptaDey/insent_log_analyzer#readme",
+  "devDependencies": {
+    "aws-sdk": "^2.771.0",
+    "moment": "^2.29.1"
+  }
+}
