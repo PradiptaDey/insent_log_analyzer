@@ -24,13 +24,14 @@ s3Stream.on('error', function(err) {
 s3Stream.pipe(unzip);
 //to read data line by line
 const readInterface = readline.createInterface({
-  input: fs.createReadStream('00000')
+  input: unzip
 });
 
 const suspiciousList = new Set();
 
 try {
   fs.rmdirSync('data', { recursive: true });
+  fs.rmdirSync('average-data', { recursive: true });
 } catch (e) {
   console.error(`Error while deleting.`);
 }
@@ -59,12 +60,11 @@ readInterface.on('line', function(line) {
     //if the combination of session and page already present in the suspicious list dont make memory overload
     if (pageDetails[pageId]) {
       const sessionBasedLog = pageDetails[pageId];
-      if (pageDetails[pageId]) {
+      if (sessionBasedLog[sessionId]) {
         let visitedAtList = sessionBasedLog[sessionId];
         //to detect the suspicious session
         const obj = _detectActivity(visitedAtList, time);
         if (obj.isSuspicious) {
-          console.log("Here I come");
           suspiciousList.add(`${sessionId}-${pageId}`);
         }
         visitedAtList = obj.timeList;
@@ -85,7 +85,8 @@ readInterface.on('line', function(line) {
 
 //TODO: we can write a file using the suspicious ids
 readInterface.on('close', function() {
-  console.log("-----", suspiciousList);
+  console.log("suspiciousList:", suspiciousList);
+  _findAverageNumberOfSeconds();
 });
 
 //detecting the session visting same page more than 10 times with in 10 seconds
@@ -104,4 +105,38 @@ function _detectActivity(timeList, time) {
   timeList.push(time);
 
   return { isSuspicious, timeList };
+}
+
+//find the frequency by page and session
+function _findAverageNumberOfSeconds() {
+  if (fs.existsSync('data')) {
+    const files = fs.readdirSync('data');
+    if (files.length > 0) {
+      files.forEach(file => {
+        const averageData = {};
+        const fileData = fs.readFileSync(`data/${file}`, 'utf8');
+        const pageDetails = JSON.parse(fileData);
+        const pageId = Object.keys(pageDetails)[0];
+        averageData[pageId] = {};
+        console.log(Object.keys(Object.values(pageDetails)[0]));
+        Object.keys(Object.values(pageDetails)[0]).forEach(el => {
+          const sessionId = el;
+          const timeDiffArr = [];
+          const times = Object.values(pageDetails)[0][el];
+          for (let i = 0; i < times.length - 2; i++) {
+            timeDiffArr.push(moment(times[i+1]).diff(moment(times[i]), 'seconds'));
+          }
+          const sum = timeDiffArr.reduce(function(a, b){
+            return a + b;
+          }, 0);
+          //storing in milli seconds
+          averageData[pageId][sessionId] = Math.floor((sum/timeDiffArr.length)*1000);
+        });
+        if (!fs.existsSync('average-data')) {
+          fs.mkdirSync('average-data');
+        }
+        fs.writeFileSync(`average-data/${pageId}.txt`, JSON.stringify(averageData));
+      });
+    }
+  }
 }
