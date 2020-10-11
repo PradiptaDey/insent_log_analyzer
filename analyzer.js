@@ -24,44 +24,62 @@ s3Stream.on('error', function(err) {
 s3Stream.pipe(unzip);
 //to read data line by line
 const readInterface = readline.createInterface({
-  input: unzip
+  input: fs.createReadStream('00000')
 });
 
+const suspiciousList = new Set();
 
-const structuredLogs = new Map();
-const suspiciousList = [];
-
+try {
+  fs.rmdirSync('data', { recursive: true });
+} catch (e) {
+  console.error(`Error while deleting.`);
+}
 //process the data on each line received
 readInterface.on('line', function(line) {
   //derectly process the data instead of writing into a separate file to reduce execution time
   if (line.indexOf('/user/pageVisit/spentTime') !== -1) {
+    readInterface.pause();
     const time = line.match(/^[0-9].*?Z/)[0];
     const ids = line.match(/spentTime\/([a-z0-9]*)\/([a-z0-9]*)\b/);
     const sessionId = ids[1];
     const pageId = ids[2];
-    //if the combination of session and page already present in the suspicious list dont make memory overload
-    if(!suspiciousList.find(el => el.sessionId === sessionId && el.pageId === pageId)) {
-      if (structuredLogs.has(sessionId)) {
-        const pageDetails = structuredLogs.get(sessionId);
-        if (pageDetails.has(pageId)) {
-          let visitedAtList = pageDetails.get(pageId);
-          //to detect the suspicious session
-          const obj = _detectActivity(visitedAtList, time);
-          if (obj.isSuspicious) {
-            pageDetails.delete(pageId);
-            suspiciousList.push({ sessionId, pageId });
-          } else {
-            visitedAtList = obj.timeList;
-            pageDetails.set(pageId, visitedAtList);
-          }
-        } else {
-          pageDetails.set(pageId, [time]);
-        }
-        structuredLogs.set(sessionId, pageDetails);
-      } else {
-        structuredLogs.set(sessionId, new Map().set(pageId, [time]));
+    let pageDetails = {};
+    if (!fs.existsSync('data')) {
+      fs.mkdirSync('data');
+    }
+    const path = `data/${pageId}.txt`;
+    if(fs.existsSync(path)) {
+      const fileData = fs.readFileSync(path, 'utf8');
+      try {
+        pageDetails = JSON.parse(fileData);
+      } catch (err) {
+        console.log("error occureed while parsing");
       }
     }
+    //if the combination of session and page already present in the suspicious list dont make memory overload
+    if (pageDetails[pageId]) {
+      const sessionBasedLog = pageDetails[pageId];
+      if (pageDetails[pageId]) {
+        let visitedAtList = sessionBasedLog[sessionId];
+        //to detect the suspicious session
+        const obj = _detectActivity(visitedAtList, time);
+        if (obj.isSuspicious) {
+          console.log("Here I come");
+          suspiciousList.add(`${sessionId}-${pageId}`);
+        }
+        visitedAtList = obj.timeList;
+        sessionBasedLog[sessionId] = visitedAtList;
+      } else {
+        sessionBasedLog[sessionId] = [time];
+      }
+      pageDetails[pageId] = sessionBasedLog;
+    } else {
+      pageDetails[pageId] = {};
+      pageDetails[pageId][sessionId] = [time];
+    }
+
+    fs.writeFileSync(path, JSON.stringify(pageDetails));
+    readInterface.resume();
   }
 });
 
@@ -72,28 +90,18 @@ readInterface.on('close', function() {
 
 //detecting the session visting same page more than 10 times with in 10 seconds
 function _detectActivity(timeList, time) {
-  const indexList = [];
   let isSuspicious = false;
   timeList.forEach((el, index) => {
     const prevTime = moment(el);
     const next = moment(time);
     //if the difference of time is more than 10 seconds put the ids to an array to remove the same
-    if (next.diff(prevTime, 'seconds') > 10 ) {
-      indexList.push(index);
-    } else if (timeList.length - index >= 10) {
+    if (timeList.length - index >= 10 && next.diff(prevTime, 'seconds') < 10) {
       //detected suspicious
       isSuspicious = true;
     }
   });
 
-  if (!isSuspicious) {
-    //reduce memory usage
-    indexList.forEach(el => {
-      timeList.splice(el, 1);
-    });
-    //push the current time
-    timeList.push(time);
-  }
+  timeList.push(time);
 
   return { isSuspicious, timeList };
 }
