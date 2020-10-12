@@ -71,7 +71,12 @@ function _processData(line) {
         let isSuspicious = false;
         //to detect the suspicious session
         if (!sessionBasedLog[sessionId].isSuspicious) {
-          isSuspicious = _detectActivity(visitedAtList, time);
+          isSuspicious = visitedAtList.find((el, index) => {
+            const prevTime = moment(el);
+            const next = moment(time);
+            //if the difference of time is more than 10 seconds put the ids to an array to remove the same
+            return visitedAtList.length - index >= 10 && next.diff(prevTime, 'seconds') < 10
+          });
         }
         if (isSuspicious) {
           sessionBasedLog['isSuspicious'] = true;
@@ -100,21 +105,6 @@ readInterface.on('close', function() {
   // _findAverageNumberOfSeconds();
 });
 
-//detecting the session visting same page more than 10 times with in 10 seconds
-function _detectActivity(timeList, time) {
-  let isSuspicious = false;
-  timeList.forEach((el, index) => {
-    const prevTime = moment(el);
-    const next = moment(time);
-    //if the difference of time is more than 10 seconds put the ids to an array to remove the same
-    if (timeList.length - index >= 10 && next.diff(prevTime, 'seconds') < 10) {
-      //detected suspicious
-      isSuspicious = true;
-    }
-  });
-
-  return isSuspicious;
-}
 
 //find the frequency by page and session
 function _findAverageNumberOfSeconds() {
