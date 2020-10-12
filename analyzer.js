@@ -35,21 +35,27 @@ try {
 } catch (e) {
   console.error(`Error while deleting.`);
 }
+fs.mkdirSync('data');
+const lineArr = [];
 //process the data on each line received
 readInterface.on('line', function(line) {
+  lineArr.push(line);
+  readInterface.pause();
+  _processData(lineArr.shift());
+});
+
+function _processData(line) {
   //derectly process the data instead of writing into a separate file to reduce execution time
   if (line.indexOf('/user/pageVisit/spentTime') !== -1) {
-    readInterface.pause();
     const time = line.match(/^[0-9].*?Z/)[0];
     const ids = line.match(/spentTime\/([a-z0-9]*)\/([a-z0-9]*)\b/);
     const sessionId = ids[1];
     const pageId = ids[2];
     let pageDetails = {};
-    if (!fs.existsSync('data')) {
-      fs.mkdirSync('data');
-    }
+    pageDetails[pageId] = {};
+    pageDetails[pageId][sessionId] = [time];
     const path = `data/${pageId}.txt`;
-    if(fs.existsSync(path)) {
+    if (fs.existsSync(path)) {
       const fileData = fs.readFileSync(path, 'utf8');
       try {
         pageDetails = JSON.parse(fileData);
@@ -61,32 +67,37 @@ readInterface.on('line', function(line) {
     if (pageDetails[pageId]) {
       const sessionBasedLog = pageDetails[pageId];
       if (sessionBasedLog[sessionId]) {
-        let visitedAtList = sessionBasedLog[sessionId];
+        const visitedAtList = sessionBasedLog[sessionId]['timeList'];
+        let isSuspicious = false;
         //to detect the suspicious session
-        const obj = _detectActivity(visitedAtList, time);
-        if (obj.isSuspicious) {
+        if (!sessionBasedLog[sessionId].isSuspicious) {
+          isSuspicious = _detectActivity(visitedAtList, time);
+        }
+        if (isSuspicious) {
+          sessionBasedLog['isSuspicious'] = true;
           suspiciousList.add(`${sessionId}-${pageId}`);
         }
-        visitedAtList = obj.timeList;
-        sessionBasedLog[sessionId] = visitedAtList;
+        visitedAtList.push(time);
+        sessionBasedLog[sessionId] = { 'timeList': visitedAtList };
       } else {
-        sessionBasedLog[sessionId] = [time];
+        sessionBasedLog[sessionId] = { 'timeList': [time] };
       }
       pageDetails[pageId] = sessionBasedLog;
-    } else {
-      pageDetails[pageId] = {};
-      pageDetails[pageId][sessionId] = [time];
     }
 
     fs.writeFileSync(path, JSON.stringify(pageDetails));
-    readInterface.resume();
+    if (lineArr.length > 0) {
+      _processData(lineArr.shift());
+    } else {
+      readInterface.resume();
+    }
   }
-});
+}
 
 //TODO: we can write a file using the suspicious ids
 readInterface.on('close', function() {
   console.log("suspiciousList:", suspiciousList);
-  _findAverageNumberOfSeconds();
+  // _findAverageNumberOfSeconds();
 });
 
 //detecting the session visting same page more than 10 times with in 10 seconds
@@ -102,9 +113,7 @@ function _detectActivity(timeList, time) {
     }
   });
 
-  timeList.push(time);
-
-  return { isSuspicious, timeList };
+  return isSuspicious;
 }
 
 //find the frequency by page and session
