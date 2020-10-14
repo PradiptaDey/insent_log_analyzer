@@ -35,7 +35,11 @@ try {
 } catch (e) {
   console.error(`Error while deleting.`);
 }
-fs.mkdirSync('data');
+try {
+  fs.mkdirSync('data');
+} catch (e) {
+  console.error(`Error occured while creating directory.`);
+}
 const lineArr = [];
 //process the data on each line received
 readInterface.on('line', function(line) {
@@ -74,7 +78,7 @@ function _processData(line) {
           isSuspicious = visitedAtList.find((el, index) => {
             const prevTime = moment(el);
             const next = moment(time);
-            //if the difference of time is more than 10 seconds put the ids to an array to remove the same
+            //if the difference of time is more than 10 seconds return true
             return visitedAtList.length - index >= 10 && next.diff(prevTime, 'seconds') < 10
           });
         }
