@@ -57,7 +57,7 @@ function _processData(line) {
     const pageId = ids[2];
     let pageDetails = {};
     pageDetails[pageId] = {};
-    pageDetails[pageId][sessionId] = [time];
+    pageDetails[pageId][sessionId] = { 'timeList': [time] };
     const path = `data/${pageId}.txt`;
     if (fs.existsSync(path)) {
       const fileData = fs.readFileSync(path, 'utf8');
